@@ -14,13 +14,14 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - run: dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o ../release
-      - name: Verify portable EXE size
+      - name: Publish Windows EXE
+        run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -p:IncludeNativeLibrariesForSelfExtract=false -o ../release
+      - name: Verify EXE size
         shell: pwsh
         run: |
           $file = Get-Item ../release/RedroBridgeMaker.exe
           $mb = [math]::Round($file.Length / 1MB, 2)
-          Write-Host "Portable EXE size: $mb MB"
+          Write-Host "EXE size: $mb MB"
           if ($file.Length -ge 50MB) { throw "EXE is $mb MB; target is under 50 MB." }
       - uses: actions/upload-artifact@v4
         with:
