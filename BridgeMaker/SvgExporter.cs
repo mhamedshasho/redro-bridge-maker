@@ -1,0 +1,12 @@
+using System.Globalization;
+using System.IO;
+using System.Text;
+namespace RedroBridgeMaker;
+static class SvgExporter
+{
+ public static void Save(DocumentModel d,string file){if(!d.Paths.Any())throw new InvalidOperationException("No vector paths loaded.");double minX=d.Paths.SelectMany(p=>p.Points).Min(p=>p.X),minY=d.Paths.SelectMany(p=>p.Points).Min(p=>p.Y),maxX=d.Paths.SelectMany(p=>p.Points).Max(p=>p.X),maxY=d.Paths.SelectMany(p=>p.Points).Max(p=>p.Y),w=Math.Max(.001,maxX-minX),h=Math.Max(.001,maxY-minY);string F(double v)=>v.ToString("0.########",CultureInfo.InvariantCulture);var sb=new StringBuilder();sb.Append("<svg xmlns="http://www.w3.org/2000/svg" ");sb.Append($"width="{F(w)}mm" height="{F(h)}mm" ");sb.Append($"viewBox="{F(minX)} {F(minY)} {F(w)} {F(h)}">");foreach(var p in d.Paths)foreach(var s in p.Segments){var cuts=new List<(double Start,double End)>();foreach(var g in d.Gaps){if(DistanceToSegment(g.A,s)>.01||DistanceToSegment(g.B,s)>.01)continue;double t1=Projection(g.A,s),t2=Projection(g.B,s),a=Math.Clamp(Math.Min(t1,t2),0,1),b=Math.Clamp(Math.Max(t1,t2),0,1);if(b>a)cuts.Add((a,b));}if(cuts.Count==0){Line(sb,s.A,s.B,F);continue;}double cursor=0;foreach(var cut in cuts.OrderBy(x=>x.Start)){if(cut.Start>cursor)Line(sb,Lerp(s.A,s.B,cursor),Lerp(s.A,s.B,cut.Start),F);cursor=Math.Max(cursor,cut.End);}if(cursor<1)Line(sb,Lerp(s.A,s.B,cursor),s.B,F);}sb.Append("</svg>");File.WriteAllText(file,sb.ToString(),Encoding.UTF8);}
+ static double DistanceToSegment(Pt p,Seg s){double dx=s.B.X-s.A.X,dy=s.B.Y-s.A.Y,den=dx*dx+dy*dy;if(den<=0)return Math.Sqrt(Math.Pow(p.X-s.A.X,2)+Math.Pow(p.Y-s.A.Y,2));double t=Math.Clamp(((p.X-s.A.X)*dx+(p.Y-s.A.Y)*dy)/den,0,1),qx=s.A.X+dx*t,qy=s.A.Y+dy*t;return Math.Sqrt(Math.Pow(p.X-qx,2)+Math.Pow(p.Y-qy,2));}
+ static double Projection(Pt p,Seg s){double dx=s.B.X-s.A.X,dy=s.B.Y-s.A.Y,den=dx*dx+dy*dy;if(den<=0)return 0;return Math.Clamp(((p.X-s.A.X)*dx+(p.Y-s.A.Y)*dy)/den,0,1);}
+ static Pt Lerp(Pt a,Pt b,double t)=>new(a.X+(b.X-a.X)*t,a.Y+(b.Y-a.Y)*t);
+ static void Line(StringBuilder sb,Pt a,Pt b,Func<double,string> f){sb.Append("<line ");sb.Append($"x1="{f(a.X)}" y1="{f(a.Y)}" ");sb.Append($"x2="{f(b.X)}" y2="{f(b.Y)}" ");sb.Append("stroke="black" fill="none"/>");}
+}
