@@ -39,7 +39,13 @@ static class BridgeEngine
     {
         var intervals = (int)Math.Floor(usable / spacing);
         var remainder = usable - intervals * spacing;
-        if (intervals <= 0) return AddAt(path, gaps, start, length);
+        if (intervals <= 0)
+        {
+            // With zero margins, a short line must not receive a bridge at
+            // its start. Put the only bridge in the centre of the usable run.
+            var centred = start + Math.Max(0, usable / 2);
+            return AddAt(path, gaps, centred, length);
+        }
 
         // Keep the requested spacing, but make the centre gap equal to
         // spacing + remainder. Example: 7.5 cm target plus 1.5 cm leftover
