@@ -176,14 +176,14 @@ static class VectorParser
             void Line(Pt p) { if (path == null) Move(cur); AddSegment(path!, cur, p); cur = p; }
             switch (op)
             {
-                case "newpath": path = null; break;
-                case "moveto": { var y = Pop(); var x = Pop(); Move(new Pt(x, y)); break; }
-                case "rmoveto": { var y = Pop(); var x = Pop(); Move(new Pt(cur.X + x, cur.Y + y)); break; }
-                case "lineto": { var y = Pop(); var x = Pop(); Line(new Pt(x, y)); break; }
-                case "rlineto": { var y = Pop(); var x = Pop(); Line(new Pt(cur.X + x, cur.Y + y)); break; }
-                case "closepath": if (path != null) { Line(start); path.Closed = true; } break;
-                case "curveto": { var y3 = Pop(); var x3 = Pop(); var y2 = Pop(); var x2 = Pop(); var y1 = Pop(); var x1 = Pop(); if (path != null) { AddCubic(path, cur, new Pt(x1, y1), new Pt(x2, y2), new Pt(x3, y3)); cur = new Pt(x3, y3); } break; }
-                case "rcurveto": { var y3 = Pop(); var x3 = Pop(); var y2 = Pop(); var x2 = Pop(); var y1 = Pop(); var x1 = Pop(); if (path != null) { var p = cur; var e = new Pt(p.X + x3, p.Y + y3); AddCubic(path, p, new Pt(p.X + x1, p.Y + y1), new Pt(p.X + x2, p.Y + y2), e); cur = e; } break; }
+                case "newpath": case "n": path = null; break;
+                case "moveto": case "m": { var y = Pop(); var x = Pop(); Move(new Pt(x, y)); break; }
+                case "rmoveto": case "rm": { var y = Pop(); var x = Pop(); Move(new Pt(cur.X + x, cur.Y + y)); break; }
+                case "lineto": case "l": { var y = Pop(); var x = Pop(); Line(new Pt(x, y)); break; }
+                case "rlineto": case "rl": { var y = Pop(); var x = Pop(); Line(new Pt(cur.X + x, cur.Y + y)); break; }
+                case "closepath": case "h": if (path != null) { Line(start); path.Closed = true; } break;
+                case "curveto": case "c": { var y3 = Pop(); var x3 = Pop(); var y2 = Pop(); var x2 = Pop(); var y1 = Pop(); var x1 = Pop(); if (path != null) { AddCubic(path, cur, new Pt(x1, y1), new Pt(x2, y2), new Pt(x3, y3)); cur = new Pt(x3, y3); } break; }
+                case "rcurveto": case "rc": { var y3 = Pop(); var x3 = Pop(); var y2 = Pop(); var x2 = Pop(); var y1 = Pop(); var x1 = Pop(); if (path != null) { var p = cur; var e = new Pt(p.X + x3, p.Y + y3); AddCubic(path, p, new Pt(p.X + x1, p.Y + y1), new Pt(p.X + x2, p.Y + y2), e); cur = e; } break; }
             }
         }
     }
@@ -228,6 +228,7 @@ static class VectorParser
                 case "y": { var y3 = Pop(); var x3 = Pop(); var x2 = Pop(); var y2 = Pop(); if (path != null) { var p2 = Transform(x2, y2); var p3 = Transform(x3, y3); AddCubic(path, cur, p2, p3, p3); cur = p3; } break; }
                 case "re": { var h = Pop(); var w = Pop(); var y = Pop(); var x = Pop(); var a = Transform(x, y); var b = Transform(x + w, y); var c = Transform(x + w, y + h); var d = Transform(x, y + h); path = new PathModel(); document.Paths.Add(path); AddSegment(path, a, b); AddSegment(path, b, c); AddSegment(path, c, d); AddSegment(path, d, a); path.Closed = true; cur = a; start = a; break; }
                 case "h": if (path != null) { AddSegment(path, cur, start); path.Closed = true; cur = start; } break;
+                default: stack.Clear(); break;
             }
         }
     }

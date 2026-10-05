@@ -65,7 +65,7 @@ static class UpdateService
     static string Short(string value) => value.Length > 12 ? value[..12] : value;
     static HttpClient CreateClient()
     {
-        var client = new HttpClient();
+        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
         client.DefaultRequestHeaders.UserAgent.ParseAdd("RedroBridgeMaker/1.0");
         return client;
     }

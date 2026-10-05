@@ -22,4 +22,5 @@ public class DocumentModel
 {
     public List<PathModel> Paths { get; } = new();
     public List<Gap> Gaps { get; } = new();
+    public int BridgeCount { get; set; }
 }
