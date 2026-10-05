@@ -32,15 +32,15 @@
         <WrapPanel Grid.Row="2" Margin="0,5,0,0">
             <TextBlock Text="Bridge length / طول الجسر" VerticalAlignment="Center" Margin="4,0,3,0" />
             <TextBox x:Name="BridgeLength" Width="60" Text="5" />
-            <TextBlock Text="mm   Start offset / من البداية" VerticalAlignment="Center" Margin="8,0,3,0" />
+            <TextBlock Text="cm   Start offset / من البداية" VerticalAlignment="Center" Margin="8,0,3,0" />
             <TextBox x:Name="StartOffset" Width="60" Text="2" />
-            <TextBlock Text="mm   End offset / من النهاية" VerticalAlignment="Center" Margin="8,0,3,0" />
+            <TextBlock Text="cm   End offset / من النهاية" VerticalAlignment="Center" Margin="8,0,3,0" />
             <TextBox x:Name="EndOffset" Width="60" Text="2" />
-            <TextBlock Text="mm   Count / العدد" VerticalAlignment="Center" Margin="8,0,3,0" />
+            <TextBlock Text="   Count / العدد" VerticalAlignment="Center" Margin="8,0,3,0" />
             <TextBox x:Name="BridgeCount" Width="55" Text="0" ToolTip="0 = fill automatically / صفر = حساب تلقائي" />
             <TextBlock Text="   Spacing / المسافة" VerticalAlignment="Center" Margin="8,0,3,0" />
             <TextBox x:Name="Spacing" Width="70" Text="100" ToolTip="Distance between bridge starts / المسافة بين بدايات الجسور" />
-            <TextBlock Text="mm between starts / بين البدايات" VerticalAlignment="Center" Foreground="Gray" />
+            <TextBlock Text="cm between starts / بين البدايات" VerticalAlignment="Center" Foreground="Gray" />
         </WrapPanel>
         <WrapPanel Grid.Row="3" Margin="0,5,0,0" VerticalAlignment="Center">
             <TextBlock Text="Path / المسار:" VerticalAlignment="Center" Margin="4,0,4,0" />

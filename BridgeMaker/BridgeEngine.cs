@@ -56,6 +56,20 @@ static class BridgeEngine
         return added;
     }
 
+    public static IEnumerable<Seg> VisibleParts(Seg segment, IEnumerable<Gap> gaps)
+    {
+        var cuts = gaps.Where(g => DistanceToSegment(g.A, segment) <= 0.01 && DistanceToSegment(g.B, segment) <= 0.01)
+            .Select(g => (Start: Math.Clamp(Math.Min(Projection(g.A, segment), Projection(g.B, segment)), 0, 1), End: Math.Clamp(Math.Max(Projection(g.A, segment), Projection(g.B, segment)), 0, 1)))
+            .Where(c => c.End > c.Start + 1e-9).OrderBy(c => c.Start).ToList();
+        var cursor = 0.0;
+        foreach (var cut in cuts)
+        {
+            if (cut.Start > cursor + 1e-9) yield return new Seg(Lerp(segment.A, segment.B, cursor), Lerp(segment.A, segment.B, cut.Start));
+            cursor = Math.Max(cursor, cut.End);
+        }
+        if (cursor < 1 - 1e-9) yield return new Seg(Lerp(segment.A, segment.B, cursor), segment.B);
+    }
+
     public static bool TryGetNearest(PathModel path, Pt point, out double distanceAlong, out double distance)
     {
         distanceAlong = 0; distance = double.MaxValue; var run = 0.0;
@@ -85,4 +99,15 @@ static class BridgeEngine
         var length = Distance(segment.A, segment.B); var t = length <= 0 ? 0 : Math.Clamp(distance / length, 0, 1);
         return new Pt(segment.A.X + (segment.B.X - segment.A.X) * t, segment.A.Y + (segment.B.Y - segment.A.Y) * t);
     }
+
+    static double DistanceToSegment(Pt p, Seg s)
+    {
+        var t = Projection(p, s); var q = Lerp(s.A, s.B, t); return Distance(p, q);
+    }
+    static double Projection(Pt p, Seg s)
+    {
+        var dx = s.B.X - s.A.X; var dy = s.B.Y - s.A.Y; var den = dx * dx + dy * dy;
+        return den <= 1e-12 ? 0 : Math.Clamp(((p.X - s.A.X) * dx + (p.Y - s.A.Y) * dy) / den, 0, 1);
+    }
+    static Pt Lerp(Pt a, Pt b, double t) => new(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t);
 }

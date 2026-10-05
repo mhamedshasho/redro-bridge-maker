@@ -39,17 +39,16 @@ public partial class MainWindow : Window
 
         foreach (var path in document.Paths)
             foreach (var segment in path.Segments)
-                Preview.Children.Add(new Line { X1 = (segment.A.X - minX) * scale, Y1 = (maxY - segment.A.Y) * scale, X2 = (segment.B.X - minX) * scale, Y2 = (maxY - segment.B.Y) * scale, Stroke = path == selectedPath ? Brushes.DodgerBlue : Brushes.Black, StrokeThickness = path == selectedPath ? Math.Max(2, 2 * ZoomSlider.Value) : Math.Max(1, 1.2 * ZoomSlider.Value) });
-        foreach (var gap in document.Gaps)
-            Preview.Children.Add(new Line { X1 = (gap.A.X - minX) * scale, Y1 = (maxY - gap.A.Y) * scale, X2 = (gap.B.X - minX) * scale, Y2 = (maxY - gap.B.Y) * scale, Stroke = Brushes.Red, StrokeThickness = Math.Max(3, 4 * ZoomSlider.Value) });
+                foreach (var visible in BridgeEngine.VisibleParts(segment, document.Gaps))
+                    Preview.Children.Add(new Line { X1 = (visible.A.X - minX) * scale, Y1 = (maxY - visible.A.Y) * scale, X2 = (visible.B.X - minX) * scale, Y2 = (maxY - visible.B.Y) * scale, Stroke = path == selectedPath ? Brushes.DodgerBlue : Brushes.Black, StrokeThickness = path == selectedPath ? Math.Max(2, 2 * ZoomSlider.Value) : Math.Max(1, 1.2 * ZoomSlider.Value) });
         Preview.Width = Math.Max(100, width * scale + 20); Preview.Height = Math.Max(100, height * scale + 20);
 
         var totalLength = document.Paths.Sum(BridgeEngine.PathLength);
-        var text = $"Drawing / الرسم: W {width:0.##} mm × H {height:0.##} mm | Total path / طول المسارات: {totalLength:0.##} mm";
+        var text = $"Drawing / الرسم: W {width / 10:0.##} cm × H {height / 10:0.##} cm | Total path / طول المسارات: {totalLength / 10:0.##} cm";
         if (selectedPath != null)
         {
             var selectedBounds = Bounds(selectedPath.Points);
-            text += $" | Selected path / المسار المحدد: L {BridgeEngine.PathLength(selectedPath):0.##} mm, W {selectedBounds.Width:0.##} mm × H {selectedBounds.Height:0.##} mm";
+            text += $" | Selected path / المسار المحدد: L {BridgeEngine.PathLength(selectedPath) / 10:0.##} cm, W {selectedBounds.Width / 10:0.##} cm × H {selectedBounds.Height / 10:0.##} cm";
         }
         Dimensions.Text = text;
         Status.Text = $"Paths / المسارات: {document.Paths.Count} | Bridges / الجسور: {document.BridgeCount} | Zoom / التكبير: {ZoomSlider.Value * 100:0}%";
@@ -157,9 +156,9 @@ public partial class MainWindow : Window
     }
 
     bool TryReadLength(out double value) { value = 0; if (!TryRead(BridgeLength.Text, "bridge length / طول الجسر", out value) || value <= 0) { MessageBox.Show("Bridge length must be greater than zero / طول الجسر يجب أن يكون أكبر من صفر."); return false; } return true; }
-    static bool TryRead(string text, string label, out double value) { if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) && !double.IsNaN(value) && !double.IsInfinity(value)) return true; value = 0; MessageBox.Show($"Enter a valid {label} in millimetres / أدخل قيمة صحيحة بالميليمتر."); return false; }
+    static bool TryRead(string text, string label, out double value) { if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var cm) && !double.IsNaN(cm) && !double.IsInfinity(cm)) { value = cm * 10; return true; } value = 0; MessageBox.Show($"Enter a valid {label} in centimetres / أدخل قيمة صحيحة بالسنتيمتر."); return false; }
     static bool TryReadInt(string text, string label, out int value) { if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value)) return true; value = 0; MessageBox.Show($"Enter a valid whole number for {label} / أدخل رقماً صحيحاً لـ {label}."); return false; }
-    static double ReadOrDefault(string text, double fallback) => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && value >= 0 ? value : fallback;
+    static double ReadOrDefault(string text, double fallback) => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && value >= 0 ? value * 10 : fallback * 10;
 
     static (double Width, double Height) Bounds(IEnumerable<Pt> points)
     {
@@ -173,14 +172,14 @@ public partial class MainWindow : Window
         var window = new Window { Title = "Manual bridge settings / إعدادات الجسر اليدوي", Width = 430, Height = 330, ResizeMode = ResizeMode.NoResize, WindowStartupLocation = WindowStartupLocation.CenterOwner, Owner = owner };
         var grid = new Grid { Margin = new Thickness(12) };
         for (var i = 0; i < 6; i++) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        var fields = new[] { ("Start from beginning / من بداية المسار", startDefault.ToString("0.##", CultureInfo.InvariantCulture)), ("End from end / من نهاية المسار", endDefault.ToString("0.##", CultureInfo.InvariantCulture)), ("Number of bridges / عدد الجسور", "1"), ("Spacing between starts / المسافة بين البدايات", spacingDefault.ToString("0.##", CultureInfo.InvariantCulture)) };
+        var fields = new[] { ("Start from beginning / من بداية المسار (cm)", (startDefault / 10).ToString("0.##", CultureInfo.InvariantCulture)), ("End from end / من نهاية المسار (cm)", (endDefault / 10).ToString("0.##", CultureInfo.InvariantCulture)), ("Number of bridges / عدد الجسور", "1"), ("Spacing between starts / المسافة بين البدايات (cm)", (spacingDefault / 10).ToString("0.##", CultureInfo.InvariantCulture)) };
         var boxes = new List<TextBox>();
         for (var i = 0; i < fields.Length; i++) { var panel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 4) }; panel.Children.Add(new TextBlock { Text = fields[i].Item1, Width = 265, VerticalAlignment = VerticalAlignment.Center }); var box = new TextBox { Text = fields[i].Item2, Width = 100 }; boxes.Add(box); panel.Children.Add(box); Grid.SetRow(panel, i); grid.Children.Add(panel); }
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right }; var ok = new Button { Content = "OK / موافق", Width = 90, IsDefault = true }; var cancel = new Button { Content = "Cancel / إلغاء", Width = 90, IsCancel = true }; buttons.Children.Add(ok); buttons.Children.Add(cancel); Grid.SetRow(buttons, 5); grid.Children.Add(buttons); window.Content = grid;
         double parsedStart = 0, parsedEnd = 0, parsedSpacing = 0; int parsedCount = 0;
         ok.Click += (_, _) => { if (TryParseDialog(boxes, out parsedStart, out parsedEnd, out parsedCount, out parsedSpacing)) window.DialogResult = true; };
         if (window.ShowDialog() != true) return false;
-        start = parsedStart; end = parsedEnd; count = parsedCount; spacing = parsedSpacing; return true;
+        start = parsedStart * 10; end = parsedEnd * 10; count = parsedCount; spacing = parsedSpacing * 10; return true;
     }
 
     static bool TryParseDialog(List<TextBox> boxes, out double start, out double end, out int count, out double spacing)
