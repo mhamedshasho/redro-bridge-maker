@@ -19,7 +19,7 @@ jobs:
 
       # Small single EXE. Requires the Windows .NET 8 Desktop Runtime.
       - name: Publish lightweight EXE
-        run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o ../release/light
+        run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o ../release/light
 
       # Fully portable single EXE. It includes the runtime and works on a
       # normal Windows 10/11 x64 computer without installing .NET.
