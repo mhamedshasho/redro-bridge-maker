@@ -6,8 +6,9 @@ static class BridgeEngine
 
     public static double PathLength(PathModel path) => path.Segments.Sum(s => Distance(s.A, s.B));
 
-    // spacing is the distance between the START of one bridge and the START
-    // of the next bridge, measured along the selected path.
+    // spacing is the target distance between bridge starts. Any leftover is
+    // placed in the middle gap; if it reaches 10 cm, a bridge is added.
+    public const double ExtraBridgeThreshold = 100.0; // internal unit: mm
     public static int Automatic(DocumentModel document, double length, double start, double end, double spacing, int requestedCount = 0)
     {
         Validate(length, start, end, spacing, requestedCount);
@@ -25,10 +26,43 @@ static class BridgeEngine
     {
         Validate(length, start, end, spacing, requestedCount);
         var total = PathLength(path);
-        var available = total < start + length + end ? 0 : (int)Math.Floor((total - end - start - length) / spacing) + 1;
-        var count = requestedCount > 0 ? Math.Min(requestedCount, available) : available;
+        var usable = total - start - end - length;
+        if (usable < 0) return 0;
+        if (requestedCount == 0) return PlaceBalanced(path, gaps, length, start, usable, spacing);
+        var available = (int)Math.Floor(usable / spacing) + 1;
+        var count = Math.Min(requestedCount, available);
         for (var i = 0; i < count; i++) AddAt(path, gaps, start + i * spacing, length);
         return count;
+    }
+
+    static int PlaceBalanced(PathModel path, List<Gap> gaps, double length, double start, double usable, double spacing)
+    {
+        var intervals = (int)Math.Floor(usable / spacing);
+        var remainder = usable - intervals * spacing;
+        if (intervals <= 0) return AddAt(path, gaps, start, length);
+
+        // Keep the requested spacing, but make the centre gap equal to
+        // spacing + remainder. Example: 7.5 cm target plus 1.5 cm leftover
+        // becomes 7.5 cm, 9 cm, 7.5 cm, matching the CorelDRAW example.
+        var middleGap = intervals / 2;
+        var centralGap = spacing + remainder;
+        var position = start;
+        var bridgeCount = intervals + 1;
+        for (var i = 0; i < bridgeCount; i++)
+        {
+            AddAt(path, gaps, position, length);
+            if (i < intervals) position += i == middleGap ? centralGap : spacing;
+        }
+
+        // If the resulting centre gap reaches 10 cm, place one bridge in its
+        // middle. This is the requested "extra gap >= 10 cm" rule.
+        if (centralGap >= ExtraBridgeThreshold)
+        {
+            var centreStart = start + middleGap * spacing;
+            AddAt(path, gaps, centreStart + centralGap / 2, length);
+            return bridgeCount + 1;
+        }
+        return bridgeCount;
     }
 
     public static int AddAt(PathModel path, List<Gap> gaps, double at, double length)

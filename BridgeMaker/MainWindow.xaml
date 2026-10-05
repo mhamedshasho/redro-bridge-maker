@@ -41,6 +41,7 @@
             <TextBlock Text="   Spacing / المسافة" VerticalAlignment="Center" Margin="8,0,3,0" />
             <TextBox x:Name="Spacing" Width="70" Text="100" ToolTip="Distance between bridge starts / المسافة بين بدايات الجسور" />
             <TextBlock Text="cm between starts / بين البدايات" VerticalAlignment="Center" Foreground="Gray" />
+            <TextBlock Text="   Auto: leftover goes in center; 10 cm+ adds a bridge / التلقائي: الزائد بالنصف؛ 10 سم+ يضيف جسراً" VerticalAlignment="Center" Foreground="Gray" Margin="10,0,0,0" />
         </WrapPanel>
         <WrapPanel Grid.Row="3" Margin="0,5,0,0" VerticalAlignment="Center">
             <TextBlock Text="Path / المسار:" VerticalAlignment="Center" Margin="4,0,4,0" />
