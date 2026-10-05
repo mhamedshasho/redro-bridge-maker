@@ -12,6 +12,8 @@ public partial class MainWindow : Window
 {
     readonly DocumentModel document = new();
     double baseScale = 1, scale = 1, minX, maxY;
+    PathModel? selectedPath;
+    bool updatingPathSelector;
     bool manualMode;
 
     public MainWindow()
@@ -23,18 +25,58 @@ public partial class MainWindow : Window
     void Draw()
     {
         Preview.Children.Clear();
-        if (!document.Paths.Any()) { Status.Text = "No vector paths loaded / لا توجد مسارات."; return; }
+        if (!document.Paths.Any())
+        {
+            Dimensions.Text = "Drawing dimensions / أبعاد الرسم: —";
+            Status.Text = "No vector paths loaded / لا توجد مسارات.";
+            return;
+        }
         var points = document.Paths.SelectMany(p => p.Points).ToList();
         minX = points.Min(p => p.X); var minY = points.Min(p => p.Y); maxY = points.Max(p => p.Y);
-        var maxX = points.Max(p => p.X); var width = Math.Max(1, maxX - minX); var height = Math.Max(1, maxY - minY);
-        baseScale = Math.Min(1000 / width, 620 / height); scale = baseScale * ZoomSlider.Value;
+        var maxX = points.Max(p => p.X); var width = Math.Max(0, maxX - minX); var height = Math.Max(0, maxY - minY);
+        baseScale = Math.Min(1000 / Math.Max(1, width), 620 / Math.Max(1, height));
+        scale = baseScale * ZoomSlider.Value;
+
         foreach (var path in document.Paths)
             foreach (var segment in path.Segments)
-                Preview.Children.Add(new Line { X1 = (segment.A.X - minX) * scale, Y1 = (maxY - segment.A.Y) * scale, X2 = (segment.B.X - minX) * scale, Y2 = (maxY - segment.B.Y) * scale, Stroke = Brushes.Black, StrokeThickness = Math.Max(1, 1.2 * ZoomSlider.Value) });
+                Preview.Children.Add(new Line { X1 = (segment.A.X - minX) * scale, Y1 = (maxY - segment.A.Y) * scale, X2 = (segment.B.X - minX) * scale, Y2 = (maxY - segment.B.Y) * scale, Stroke = path == selectedPath ? Brushes.DodgerBlue : Brushes.Black, StrokeThickness = path == selectedPath ? Math.Max(2, 2 * ZoomSlider.Value) : Math.Max(1, 1.2 * ZoomSlider.Value) });
         foreach (var gap in document.Gaps)
             Preview.Children.Add(new Line { X1 = (gap.A.X - minX) * scale, Y1 = (maxY - gap.A.Y) * scale, X2 = (gap.B.X - minX) * scale, Y2 = (maxY - gap.B.Y) * scale, Stroke = Brushes.Red, StrokeThickness = Math.Max(3, 4 * ZoomSlider.Value) });
-        Preview.Width = width * scale + 20; Preview.Height = height * scale + 20;
-        Status.Text = $"Paths / المسارات: {document.Paths.Count} | Bridges / الجسور: {document.BridgeCount} | mm | Spacing = distance between bridge starts / المسافة بين بدايات الجسور";
+        Preview.Width = Math.Max(100, width * scale + 20); Preview.Height = Math.Max(100, height * scale + 20);
+
+        var totalLength = document.Paths.Sum(BridgeEngine.PathLength);
+        var text = $"Drawing / الرسم: W {width:0.##} mm × H {height:0.##} mm | Total path / طول المسارات: {totalLength:0.##} mm";
+        if (selectedPath != null)
+        {
+            var selectedBounds = Bounds(selectedPath.Points);
+            text += $" | Selected path / المسار المحدد: L {BridgeEngine.PathLength(selectedPath):0.##} mm, W {selectedBounds.Width:0.##} mm × H {selectedBounds.Height:0.##} mm";
+        }
+        Dimensions.Text = text;
+        Status.Text = $"Paths / المسارات: {document.Paths.Count} | Bridges / الجسور: {document.BridgeCount} | Zoom / التكبير: {ZoomSlider.Value * 100:0}%";
+    }
+
+    void PopulatePathSelector()
+    {
+        updatingPathSelector = true;
+        PathSelector.Items.Clear();
+        PathSelector.Items.Add("All drawing / كامل الرسم");
+        for (var i = 0; i < document.Paths.Count; i++) PathSelector.Items.Add($"Path {i + 1} / المسار {i + 1}");
+        PathSelector.SelectedIndex = selectedPath == null ? 0 : document.Paths.IndexOf(selectedPath) + 1;
+        updatingPathSelector = false;
+    }
+
+    void PathSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (updatingPathSelector || PathSelector.SelectedIndex < 0) return;
+        selectedPath = PathSelector.SelectedIndex == 0 ? null : document.Paths[PathSelector.SelectedIndex - 1];
+        Draw();
+    }
+
+    void SelectPath(PathModel path)
+    {
+        selectedPath = path;
+        updatingPathSelector = true; PathSelector.SelectedIndex = document.Paths.IndexOf(path) + 1; updatingPathSelector = false;
+        Draw();
     }
 
     void Open_Click(object sender, RoutedEventArgs e)
@@ -44,8 +86,8 @@ public partial class MainWindow : Window
         try
         {
             var loaded = VectorParser.Load(dialog.FileName);
-            document.Paths.Clear(); document.Gaps.Clear(); document.BridgeCount = 0; document.Paths.AddRange(loaded.Paths);
-            manualMode = false; ManualButton.Content = "Manual: Off | يدوي: إيقاف"; Draw();
+            document.Paths.Clear(); document.Gaps.Clear(); document.BridgeCount = 0; document.Paths.AddRange(loaded.Paths); selectedPath = null; PopulatePathSelector(); Draw();
+            manualMode = false; ManualButton.Content = "Manual: Off | يدوي: إيقاف";
             Status.Text = $"Loaded / تم فتح: {System.IO.Path.GetFileName(dialog.FileName)} | Paths / المسارات: {document.Paths.Count}";
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Open failed / فشل الفتح", MessageBoxButton.OK, MessageBoxImage.Error); }
@@ -77,20 +119,16 @@ public partial class MainWindow : Window
         if (!manualMode) return;
         var screen = e.GetPosition(Preview);
         var target = new Pt(minX + screen.X / scale, maxY - screen.Y / scale);
-        PathModel? selected = null; var nearestDistance = double.MaxValue;
-        foreach (var path in document.Paths)
-            if (BridgeEngine.TryGetNearest(path, target, out _, out var distance) && distance < nearestDistance) { selected = path; nearestDistance = distance; }
-        if (selected == null || nearestDistance > 8 / scale) { Status.Text = "Click directly on a black path / اضغط مباشرة على مسار أسود."; return; }
+        PathModel? path = null; var nearestDistance = double.MaxValue;
+        foreach (var candidate in document.Paths)
+            if (BridgeEngine.TryGetNearest(candidate, target, out _, out var distance) && distance < nearestDistance) { path = candidate; nearestDistance = distance; }
+        if (path == null || nearestDistance > 8 / scale) { Status.Text = "Click directly on a black path / اضغط مباشرة على مسار أسود."; return; }
+        SelectPath(path);
         if (!TryReadLength(out var length)) return;
-        if (!ShowPlacementDialog(this, length, double.Parse(StartOffset.Text, CultureInfo.InvariantCulture), double.Parse(EndOffset.Text, CultureInfo.InvariantCulture), double.Parse(Spacing.Text, CultureInfo.InvariantCulture), out var start, out var end, out var count, out var spacing)) return;
-
+        if (!ShowPlacementDialog(this, ReadOrDefault(StartOffset.Text, 2), ReadOrDefault(EndOffset.Text, 2), ReadOrDefault(Spacing.Text, 100), out var start, out var end, out var count, out var spacing)) return;
         var newGaps = new List<Gap>();
-        var placed = BridgeEngine.PlaceSeries(selected, newGaps, length, start, end, spacing, count);
-        if (placed != count)
-        {
-            MessageBox.Show($"Only {placed} bridge(s) fit between the start and end offsets / عدد الجسور الممكنة هو {placed}.", "Not enough path length / طول المسار غير كافٍ", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
+        var placed = BridgeEngine.PlaceSeries(path, newGaps, length, start, end, spacing, count);
+        if (placed != count) { MessageBox.Show($"Only {placed} bridge(s) fit / عدد الجسور الممكنة هو {placed}.", "Not enough path length / طول المسار غير كافٍ", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
         document.Gaps.AddRange(newGaps); document.BridgeCount += placed; Draw();
     }
 
@@ -105,11 +143,7 @@ public partial class MainWindow : Window
         catch (Exception ex) { MessageBox.Show(ex.Message, "Export failed / فشل التصدير", MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
-    void ZoomSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (ZoomText != null) ZoomText.Text = $"{e.NewValue * 100:0}%";
-        if (IsLoaded) Draw();
-    }
+    void ZoomSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (ZoomText != null) ZoomText.Text = $"{e.NewValue * 100:0}%"; if (IsLoaded) Draw(); }
     void ZoomIn_Click(object sender, RoutedEventArgs e) => ZoomSlider.Value = Math.Min(ZoomSlider.Maximum, ZoomSlider.Value + 0.25);
     void ZoomOut_Click(object sender, RoutedEventArgs e) => ZoomSlider.Value = Math.Max(ZoomSlider.Minimum, ZoomSlider.Value - 0.25);
     void Preview_MouseWheel(object sender, MouseWheelEventArgs e) { e.Handled = true; if (e.Delta > 0) ZoomIn_Click(sender, e); else ZoomOut_Click(sender, e); }
@@ -121,13 +155,19 @@ public partial class MainWindow : Window
         if (start < 0 || end < 0 || spacing <= 0 || count < 0) { MessageBox.Show("Offsets/count cannot be negative and spacing must be greater than zero.\nلا يمكن أن تكون القيم سالبة والمسافة يجب أن تكون أكبر من صفر."); return false; }
         return true;
     }
-    bool TryReadLength(out double value) { value = 0; if (!TryRead(BridgeLength.Text, "bridge length / طول الجسر", out value) || value <= 0) { MessageBox.Show("Bridge length must be greater than zero / طول الجسر يجب أن يكون أكبر من صفر."); return false; } return true; }
-    static bool TryRead(string text, string label, out double value) => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) && !double.IsNaN(value) && !double.IsInfinity(value) || Invalid(label, out value);
-    static bool Invalid(string label, out double value) { value = 0; MessageBox.Show($"Enter a valid {label} in millimetres / أدخل قيمة صحيحة بالميليمتر."); return false; }
-    static bool TryReadInt(string text, string label, out int value) => int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value) || InvalidInt(label, out value);
-    static bool InvalidInt(string label, out int value) { value = 0; MessageBox.Show($"Enter a valid whole number for {label} / أدخل رقماً صحيحاً لـ {label}."); return false; }
 
-    static bool ShowPlacementDialog(Window owner, double length, double startDefault, double endDefault, double spacingDefault, out double start, out double end, out int count, out double spacing)
+    bool TryReadLength(out double value) { value = 0; if (!TryRead(BridgeLength.Text, "bridge length / طول الجسر", out value) || value <= 0) { MessageBox.Show("Bridge length must be greater than zero / طول الجسر يجب أن يكون أكبر من صفر."); return false; } return true; }
+    static bool TryRead(string text, string label, out double value) { if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) && !double.IsNaN(value) && !double.IsInfinity(value)) return true; value = 0; MessageBox.Show($"Enter a valid {label} in millimetres / أدخل قيمة صحيحة بالميليمتر."); return false; }
+    static bool TryReadInt(string text, string label, out int value) { if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value)) return true; value = 0; MessageBox.Show($"Enter a valid whole number for {label} / أدخل رقماً صحيحاً لـ {label}."); return false; }
+    static double ReadOrDefault(string text, double fallback) => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && value >= 0 ? value : fallback;
+
+    static (double Width, double Height) Bounds(IEnumerable<Pt> points)
+    {
+        var list = points.ToList(); if (list.Count == 0) return (0, 0);
+        return (list.Max(p => p.X) - list.Min(p => p.X), list.Max(p => p.Y) - list.Min(p => p.Y));
+    }
+
+    static bool ShowPlacementDialog(Window owner, double startDefault, double endDefault, double spacingDefault, out double start, out double end, out int count, out double spacing)
     {
         start = end = spacing = 0; count = 0;
         var window = new Window { Title = "Manual bridge settings / إعدادات الجسر اليدوي", Width = 430, Height = 330, ResizeMode = ResizeMode.NoResize, WindowStartupLocation = WindowStartupLocation.CenterOwner, Owner = owner };
@@ -140,8 +180,7 @@ public partial class MainWindow : Window
         double parsedStart = 0, parsedEnd = 0, parsedSpacing = 0; int parsedCount = 0;
         ok.Click += (_, _) => { if (TryParseDialog(boxes, out parsedStart, out parsedEnd, out parsedCount, out parsedSpacing)) window.DialogResult = true; };
         if (window.ShowDialog() != true) return false;
-        start = parsedStart; end = parsedEnd; count = parsedCount; spacing = parsedSpacing;
-        return true;
+        start = parsedStart; end = parsedEnd; count = parsedCount; spacing = parsedSpacing; return true;
     }
 
     static bool TryParseDialog(List<TextBox> boxes, out double start, out double end, out int count, out double spacing)

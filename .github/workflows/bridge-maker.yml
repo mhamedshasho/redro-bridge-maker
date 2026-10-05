@@ -18,6 +18,11 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-libcdr
 
       # Small single EXE. Requires the Windows .NET 8 Desktop Runtime.
       - name: Publish lightweight EXE
@@ -41,6 +46,21 @@ jobs:
           "@ | Set-Content ../release/README.txt
           "${env:GITHUB_SHA}" | Set-Content ../release/version.txt
 
+      - name: Bundle CDR reader into both packages
+        shell: msys2 {0}
+        run: |
+          for flavor in light portable; do
+            mkdir -p "../release/$flavor/cdr-support"
+            cp /mingw64/bin/cdr2xhtml.exe "../release/$flavor/cdr-support/"
+            ldd /mingw64/bin/cdr2xhtml.exe | awk '/=> \/mingw64\/bin\// {print $3}' | while read dll; do cp "$dll" "../release/$flavor/cdr-support/"; done
+          done
+
+      - name: Create separate downloadable packages
+        shell: pwsh
+        run: |
+          Compress-Archive -Path ../release/light/* -DestinationPath ../release/RedroBridgeMaker-Light.zip -Force
+          Compress-Archive -Path ../release/portable/* -DestinationPath ../release/RedroBridgeMaker-Portable.zip -Force
+
       - name: Publish rolling latest release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -49,9 +69,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             gh release create latest --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "Latest Bridge Maker build" --notes "Automatically updated build for the in-app updater." --prerelease
           }
-          gh release upload latest --repo "${{ github.repository }}" ../release/light/RedroBridgeMaker-Light.exe ../release/portable/RedroBridgeMaker-Portable.exe ../release/version.txt --clobber
+          gh release upload latest --repo "${{ github.repository }}" ../release/RedroBridgeMaker-Light.zip ../release/RedroBridgeMaker-Portable.zip ../release/light/RedroBridgeMaker-Light.exe ../release/portable/RedroBridgeMaker-Portable.exe ../release/version.txt --clobber
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Redro-Bridge-Maker-Windows
-          path: release/
+          name: Redro-Bridge-Maker-Light
+          path: release/RedroBridgeMaker-Light.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Redro-Bridge-Maker-Portable
+          path: release/RedroBridgeMaker-Portable.zip

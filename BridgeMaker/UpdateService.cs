@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Reflection;
 using System.IO;
+using System.IO.Compression;
 using System.Text.Json;
 using System.Windows;
 
@@ -23,8 +24,8 @@ static class UpdateService
             var remoteVersion = await DownloadVersionAsync(release);
             if (string.IsNullOrWhiteSpace(remoteVersion) || string.Equals(current, remoteVersion.Trim(), StringComparison.OrdinalIgnoreCase)) return;
 
-            var assetName = (Path.GetFileName(Environment.ProcessPath) ?? "").Contains("Portable", StringComparison.OrdinalIgnoreCase)
-                ? "RedroBridgeMaker-Portable.exe" : "RedroBridgeMaker-Light.exe";
+            var flavor = (Path.GetFileName(Environment.ProcessPath) ?? "").Contains("Portable", StringComparison.OrdinalIgnoreCase) ? "Portable" : "Light";
+            var assetName = "RedroBridgeMaker-" + flavor + ".zip";
             var asset = release.Assets?.FirstOrDefault(a => string.Equals(a.Name, assetName, StringComparison.OrdinalIgnoreCase));
             if (asset == null || string.IsNullOrWhiteSpace(asset.BrowserDownloadUrl)) return;
 
@@ -51,12 +52,19 @@ static class UpdateService
     {
         var currentExe = Environment.ProcessPath;
         if (string.IsNullOrWhiteSpace(currentExe) || !File.Exists(currentExe)) return;
-        var replacement = Path.Combine(Path.GetTempPath(), "RedroBridgeMaker-" + Guid.NewGuid().ToString("N") + ".exe");
-        await using (var input = await Client.GetStreamAsync(url)) await using (var output = File.Create(replacement)) await input.CopyToAsync(output);
-
+        var package = Path.Combine(Path.GetTempPath(), "RedroBridgeMaker-package-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(package);
+        var archive = Path.Combine(Path.GetTempPath(), "RedroBridgeMaker-" + Guid.NewGuid().ToString("N") + ".zip");
+        await using (var input = await Client.GetStreamAsync(url)) await using (var output = File.Create(archive)) await input.CopyToAsync(output);
+        ZipFile.ExtractToDirectory(archive, package);
+        File.Delete(archive);
+        var flavor = (Path.GetFileName(currentExe) ?? "").Contains("Portable", StringComparison.OrdinalIgnoreCase) ? "Portable" : "Light";
+        var replacement = Path.Combine(package, "RedroBridgeMaker-" + flavor + ".exe");
+        if (!File.Exists(replacement)) throw new InvalidDataException("The update package is incomplete.");
+        var currentDirectory = Path.GetDirectoryName(currentExe)!;
         var script = Path.Combine(Path.GetTempPath(), "RedroBridgeMaker-update-" + Guid.NewGuid().ToString("N") + ".cmd");
         var pid = Environment.ProcessId;
-        File.WriteAllText(script, $"@echo off\r\n:wait\r\ntasklist /FI \"PID eq {pid}\" | find \"{pid}\" >nul\r\nif not errorlevel 1 (timeout /t 1 /nobreak >nul & goto wait)\r\nmove /Y \"{replacement}\" \"{currentExe}\" >nul\r\nstart \"\" \"{currentExe}\"\r\ndel \"%~f0\"\r\n");
+        File.WriteAllText(script, $"@echo off\r\n:wait\r\ntasklist /FI \"PID eq {pid}\" | find \"{pid}\" >nul\r\nif not errorlevel 1 (timeout /t 1 /nobreak >nul & goto wait)\r\nif exist \"{package}\\cdr-support\" xcopy /E /I /Y \"{package}\\cdr-support\" \"{currentDirectory}\\cdr-support\" >nul\r\nmove /Y \"{replacement}\" \"{currentExe}\" >nul\r\nstart \"\" \"{currentExe}\"\r\nrmdir /S /Q \"{package}\"\r\ndel \"%~f0\"\r\n");
         Process.Start(new ProcessStartInfo("cmd.exe") { UseShellExecute = false, CreateNoWindow = true, ArgumentList = { "/c", script } });
         Application.Current.Shutdown();
     }

@@ -27,10 +27,13 @@ static class VectorParser
         };
     }
 
-    static DocumentModel Svg(string file)
+    static DocumentModel Svg(string file) => SvgDocument(XDocument.Load(file, LoadOptions.PreserveWhitespace));
+
+    static DocumentModel SvgText(string text) => SvgDocument(XDocument.Parse(text, LoadOptions.PreserveWhitespace));
+
+    static DocumentModel SvgDocument(XDocument xml)
     {
         var document = new DocumentModel();
-        var xml = XDocument.Load(file, LoadOptions.PreserveWhitespace);
         foreach (var element in xml.Descendants())
         {
             var name = element.Name.LocalName.ToLowerInvariant();
@@ -235,31 +238,14 @@ static class VectorParser
 
     static DocumentModel Cdr(string file)
     {
-        var inkscape = FindOnPath("inkscape");
-        if (inkscape == null) throw new NotSupportedException("CorelDRAW files require Inkscape to be installed and available in PATH. Export the CDR as PDF/EPS/SVG, or install Inkscape and try again.");
-        var temp = Path.Combine(Path.GetTempPath(), "bridge-maker-" + Guid.NewGuid().ToString("N") + ".svg");
-        try
-        {
-            using var process = new Process { StartInfo = new ProcessStartInfo(inkscape) { UseShellExecute = false, CreateNoWindow = true } };
-            process.StartInfo.ArgumentList.Add(file); process.StartInfo.ArgumentList.Add("--export-plain-svg"); process.StartInfo.ArgumentList.Add("--export-filename=" + temp);
-            process.Start(); process.WaitForExit(30000);
-            if (process.ExitCode != 0 || !File.Exists(temp)) throw new InvalidDataException("Inkscape could not import this CDR file.");
-            return Svg(temp);
-        }
-        finally { try { if (File.Exists(temp)) File.Delete(temp); } catch { } }
-    }
-
-    static string? FindOnPath(string executable)
-    {
-        var paths = (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator);
-        if (OperatingSystem.IsWindows())
-        {
-            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-            var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
-            paths = paths.Concat(new[] { Path.Combine(programFiles, "Inkscape", "bin"), Path.Combine(programFilesX86, "Inkscape", "bin") }).ToArray();
-        }
-        foreach (var path in paths) { var candidate = Path.Combine(path, executable); if (File.Exists(candidate)) return candidate; if (OperatingSystem.IsWindows() && File.Exists(candidate + ".exe")) return candidate + ".exe"; }
-        return null;
+        var tool = Path.Combine(AppContext.BaseDirectory, "cdr-support", OperatingSystem.IsWindows() ? "cdr2xhtml.exe" : "cdr2xhtml");
+        if (!File.Exists(tool)) throw new NotSupportedException("The bundled CDR reader is missing. Download the complete Light or Portable package, not only the EXE file.");
+        using var process = new Process { StartInfo = new ProcessStartInfo(tool) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true } };
+        process.StartInfo.ArgumentList.Add(file); process.Start();
+        var output = process.StandardOutput.ReadToEnd(); var error = process.StandardError.ReadToEnd();
+        process.WaitForExit(30000);
+        if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(output)) throw new InvalidDataException("The bundled CDR reader could not import this file. " + error.Trim());
+        return SvgText(output);
     }
 
     static int IndexOf(byte[] source, byte[] value, int start)
