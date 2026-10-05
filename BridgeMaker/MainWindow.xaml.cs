@@ -14,7 +14,11 @@ public partial class MainWindow : Window
     double minX, maxY;
     bool manualMode;
 
-    public MainWindow() => InitializeComponent();
+    public MainWindow()
+    {
+        InitializeComponent();
+        Loaded += async (_, _) => await UpdateService.CheckAndOfferAsync(this);
+    }
 
     void Draw()
     {
